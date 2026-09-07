@@ -65,7 +65,7 @@ def compare(left: dict[str, Any], right: dict[str, Any], distance: int) -> dict[
     pairs = []
     for page in left["pages"]:
         choices = sorted(
-            (bin(int(page["dhash"], 16) ^ int(right["pages"][j]["dhash"], 16)).count("1"), j)
+            ((int(page["dhash"], 16) ^ int(right["pages"][j]["dhash"], 16)).bit_count(), j)
             for j in available
         )
         if choices and choices[0][0] <= distance:
@@ -93,7 +93,7 @@ def render_html(report: dict[str, Any]) -> str:
         )
     for match in report.get("visual_matches", []):
         body.append(
-            f"<section><h2>Visual candidate · {match['overlap']:.0%} page overlap</h2><p>{escape(match['left'])}<br>{escape(match['right'])}</p>"
+            f"<section><h2>Visual candidate Â· {match['overlap']:.0%} page overlap</h2><p>{escape(match['left'])}<br>{escape(match['right'])}</p>"
         )
         if match["partial"]:
             body.append(
