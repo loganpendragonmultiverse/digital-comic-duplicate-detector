@@ -77,11 +77,27 @@ def fingerprint(path: Path) -> Fingerprint:
     )
 
 
-def scan(paths: Iterable[Path], *, threshold: float = 0.9) -> dict[str, Any]:
+def scan(
+    paths: Iterable[Path],
+    *,
+    threshold: float = 0.9,
+    cache: Path | None = None,
+    rehash: bool = False,
+    visual: bool = False,
+    visual_distance: int = 6,
+) -> dict[str, Any]:
     if not 0 < threshold <= 1:
         raise ScanError("threshold must be greater than 0 and at most 1.")
     archives = discover(paths)
-    fingerprints = [fingerprint(path) for path in archives]
+    if not 0 <= visual_distance <= 64:
+        raise ScanError("visual_distance must be between 0 and 64")
+    hits = 0
+    if cache:
+        from .cache import cached_fingerprints
+
+        fingerprints, hits = cached_fingerprints(archives, cache, rehash)
+    else:
+        fingerprints = [fingerprint(path) for path in archives]
     matches = []
     for index, left in enumerate(fingerprints):
         for right in fingerprints[index + 1 :]:
@@ -102,12 +118,32 @@ def scan(paths: Iterable[Path], *, threshold: float = 0.9) -> dict[str, Any]:
                     "similarity": round(similarity, 6),
                 }
             )
-    return {
+    report = {
         "archives_scanned": len(fingerprints),
         "threshold": threshold,
         "matches": matches,
         "archives": [item.public() for item in fingerprints],
+        "cache_hits": hits,
+        "cache_note": "Metadata cache is an optimization, not proof against deliberate metadata/cache tampering; use --rehash for fresh fingerprints.",
     }
+    if visual:
+        from .visual import compare, page_evidence
+
+        pages = [page_evidence(path) for path in archives]
+        candidates = []
+        for i, left_pages in enumerate(pages):
+            for j in range(i + 1, len(pages)):
+                candidate = compare(left_pages, pages[j], visual_distance)
+                if candidate["pairs"] and candidate["overlap"] >= threshold:
+                    candidates.append(
+                        {**candidate, "left": str(archives[i]), "right": str(archives[j])}
+                    )
+        report["visual_matches"] = candidates
+        report["visual_review"] = [
+            {"path": str(path), "skipped": evidence["skipped"], "truncated": evidence["truncated"]}
+            for path, evidence in zip(archives, pages)
+        ]
+    return report
 
 
 def markdown(report: dict[str, Any]) -> str:
