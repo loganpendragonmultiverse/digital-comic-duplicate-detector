@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import zipfile
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -85,6 +86,7 @@ def scan(
     rehash: bool = False,
     visual: bool = False,
     visual_distance: int = 6,
+    multiplicity: bool = False,
 ) -> dict[str, Any]:
     if not 0 < threshold <= 1:
         raise ScanError("threshold must be greater than 0 and at most 1.")
@@ -101,7 +103,7 @@ def scan(
     matches = []
     for index, left in enumerate(fingerprints):
         for right in fingerprints[index + 1 :]:
-            similarity = _similarity(left.page_hashes, right.page_hashes)
+            similarity = _similarity(left.page_hashes, right.page_hashes, multiplicity=multiplicity)
             if left.archive_sha256 == right.archive_sha256:
                 kind = "exact_archive"
             elif left.content_sha256 == right.content_sha256 and left.page_count:
@@ -126,6 +128,8 @@ def scan(
         "cache_hits": hits,
         "cache_note": "Metadata cache is an optimization, not proof against deliberate metadata/cache tampering; use --rehash for fresh fingerprints.",
     }
+    if multiplicity:
+        report["page_overlap_mode"] = "multiplicity"
     if visual:
         from .visual import compare, page_evidence
 
@@ -154,6 +158,8 @@ def markdown(report: dict[str, Any]) -> str:
         f"Matches: **{len(report['matches'])}**",
         "",
     ]
+    if report.get("page_overlap_mode"):
+        lines.append("Page overlap: multiplicity-aware Jaccard (order ignored).")
     if not report["matches"]:
         lines.append("No exact or likely duplicates met the threshold.")
     for match in report["matches"]:
@@ -178,7 +184,13 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _similarity(left: tuple[str, ...], right: tuple[str, ...]) -> float:
+def _similarity(
+    left: tuple[str, ...], right: tuple[str, ...], *, multiplicity: bool = False
+) -> float:
+    if multiplicity:
+        left_counts, right_counts = Counter(left), Counter(right)
+        union_count = sum((left_counts | right_counts).values())
+        return sum((left_counts & right_counts).values()) / union_count if union_count else 0.0
     left_set, right_set = set(left), set(right)
     union = left_set | right_set
     return len(left_set & right_set) / len(union) if union else 0.0
