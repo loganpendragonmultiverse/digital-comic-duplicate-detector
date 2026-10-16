@@ -14,6 +14,11 @@ from .core import ScanError, markdown, scan
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="comic-duplicate-detector")
     parser.add_argument("paths", nargs="+", type=Path)
+    parser.add_argument(
+        "--multiplicity",
+        action="store_true",
+        help="Count repeated page hashes in exact-page overlap",
+    )
     parser.add_argument("--threshold", type=float, default=0.9)
     parser.add_argument("--format", choices=("markdown", "json", "html"), default="markdown")
     parser.add_argument("--cache", type=Path)
@@ -30,6 +35,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = scan(
             args.paths,
             threshold=args.threshold,
+            multiplicity=args.multiplicity,
             cache=args.cache,
             rehash=args.rehash,
             visual=args.visual,

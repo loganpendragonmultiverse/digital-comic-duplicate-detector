@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 - 2026-10-16
+
+- Added opt-in multiplicity-aware page overlap while preserving default set comparison and separate visual evidence.
+- Added synthetic regression tests for boundaries, aggregation and unchanged inputs.
+
+
 ## 1.1.0 - 2026-09-07
 
 - Cache unchanged archive hashes and add opt-in visual comparison with paired page thumbnails and overlap evidence.
