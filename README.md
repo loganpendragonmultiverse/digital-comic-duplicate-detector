@@ -6,7 +6,7 @@ Digital Comic Duplicate Detector finds exact and likely duplicate CBZ comics wit
 
 ## Three-minute start
 
-Requires Python 3.10 or newer.
+Requires Python 3.11 or newer.
 
 ```bash
 python -m pip install .
@@ -84,3 +84,34 @@ Exact tag-workflow artifacts require the same acceptance and independent review.
 Visual HTML includes skipped/truncated scan coverage even without a candidate pair. Markdown filenames are rendered as literal evidence rather than report markup.
 
 Filesystem canonicalization failures, including a looping cache link, are actionable CLI errors. Discovery explicitly checks supported archive metadata and refuses unreadable entries instead of silently reporting a completed subset.
+
+## 2.0.0: verified repository ownership
+
+This maintenance release corrects the inherited CODEOWNERS entry to the verified
+maintainer user. Version 1.2.1 remains published with its original invalid entry;
+use 2.0.0 for the corrected repository materials. Comic scanning behavior is unchanged.
+
+The `codeowners` CI job validates the exact workflow commit against GitHub: the
+catch-all entry must name `@LoganPendragonmulti`, resolve to user ID 6430701,
+have repository write access, and produce no GitHub CODEOWNERS errors. API or
+identity failures fail the job. Existing native tests, coverage, typing, dependency
+audit and CodeQL checks remain required. Release acceptance repeats ownership
+validation at the exact annotated tag commit. The ownership gate uses the existing workflow
+token and existing read-only workflow permissions. It changes no repository access
+or protection settings. The separately authorized Python 3.11 migration replaces the three required
+Python 3.10 check contexts with their Python 3.11 counterparts. This context
+migration is distinct from the read-only ownership gate; the six native matrix
+cells and all other protections remain in place.
+
+## 2.0.0 compatibility change
+
+Python 3.11 or newer is required. Pillow 13.0.0 supplies the upstream security
+fixes and no longer supports Python 3.10; this project requires Pillow>=13.0.0,<14
+for image processing. Python 3.10 users must upgrade their interpreter before
+installing this supported release. Previous published releases remain unchanged
+and are not represented as receiving these dependency fixes.
+
+The six full native CI cells use Ubuntu, Windows and macOS with Python 3.11 and
+3.14. All existing tests/assertions and the 90% coverage threshold remain, along
+with formatting, lint, strict typing, dependency audit, builds and CodeQL.
+No test skips, advisory waivers or repurposed Python 3.10 job names are introduced.
