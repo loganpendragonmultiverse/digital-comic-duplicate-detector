@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0 — 2026-10-20
+
+- Require Python 3.11 or newer and Pillow 13.0.0 or newer (below 14); the fixed dependency no longer supports Python 3.10.
+- Retain every existing test/assertion, 90% coverage and all three operating systems; test Python 3.11 and 3.14 in six full native cells.
+- Retain prior scanning and report improvements. Old published releases remain unchanged.
+
+
+### Repository ownership correction
+
+- Correct CODEOWNERS to the verified maintainer user with repository write access.
+- Add an exact-commit GitHub ownership gate that rejects unknown owners, organization/user confusion, missing access and API failures.
+- Preserve the published 1.2.1 release; it contained an invalid ownership entry and is superseded by this maintenance release.
+
 ## 1.2.1 — 2026-10-20
 
 - Make missing inputs and unreadable directories actionable.
