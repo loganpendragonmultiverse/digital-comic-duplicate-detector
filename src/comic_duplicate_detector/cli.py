@@ -28,7 +28,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output", type=Path)
     try:
         args = parser.parse_args(argv)
-        if args.output and args.output.exists():
+        if args.output and (args.output.exists() or args.output.is_symlink()):
             raise ScanError(f"Output already exists: {args.output}")
         if args.cache and args.output and args.cache.resolve() == args.output.resolve():
             raise ScanError("Cache and report paths must differ")
@@ -49,15 +49,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             rendered = render_html(result)
         if args.output:
-            if args.output.exists():
+            if args.output.exists() or args.output.is_symlink():
                 raise ScanError(f"Output already exists: {args.output}")
             args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(rendered, encoding="utf-8")
+            with args.output.open("x", encoding="utf-8") as handle:
+                handle.write(rendered)
             print(args.output.resolve())
         else:
             print(rendered, end="")
         return 1 if result["matches"] or result.get("visual_matches") else 0
-    except (ScanError, OSError) as exc:
+    except (ScanError, OSError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

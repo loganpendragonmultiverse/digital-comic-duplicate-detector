@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -22,11 +24,14 @@ def cached_fingerprints(
     if cache.suffix.lower() != ".json":
         raise ScanError("Cache must use a dedicated .json path")
     data: dict[str, Any] = {"schema": 1, "algorithm": "sha256-pages-v1", "entries": {}}
-    if cache.exists():
+    if cache.exists() or cache.is_symlink():
+        if cache.is_symlink() or not stat.S_ISREG(cache.stat().st_mode):
+            raise ScanError("Existing cache must be an ordinary non-symlink JSON file")
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
             if (
                 not isinstance(data, dict)
+                or type(data.get("schema")) is not int
                 or data.get("schema") != 1
                 or data.get("algorithm") != "sha256-pages-v1"
                 or not isinstance(data.get("entries"), dict)
@@ -44,6 +49,14 @@ def cached_fingerprints(
         if not rehash and isinstance(entry, dict) and entry.get("identity") == before:
             try:
                 value = entry["fingerprint"]
+                if (
+                    not isinstance(value, dict)
+                    or type(value.get("page_count")) is not int
+                    or not isinstance(value.get("page_hashes"), list)
+                    or not isinstance(value.get("warnings"), list)
+                    or any(not isinstance(warning, str) for warning in value["warnings"])
+                ):
+                    raise ValueError("invalid cached fingerprint types")
                 result = Fingerprint(
                     path=key,
                     archive_sha256=value["archive_sha256"],
@@ -53,14 +66,23 @@ def cached_fingerprints(
                     warnings=tuple(value["warnings"]),
                 )
                 hashes = (result.archive_sha256, result.content_sha256, *result.page_hashes)
-                if result.page_count != len(result.page_hashes) or not all(
-                    isinstance(item, str)
-                    and len(item) == 64
-                    and all(c in "0123456789abcdef" for c in item)
-                    for item in hashes
+                if (
+                    result.page_count != len(result.page_hashes)
+                    or not all(
+                        isinstance(item, str)
+                        and len(item) == 64
+                        and all(c in "0123456789abcdef" for c in item)
+                        for item in hashes
+                    )
+                    or (
+                        result.content_sha256
+                        != hashlib.sha256(
+                            "\n".join(sorted(result.page_hashes)).encode("ascii")
+                        ).hexdigest()
+                    )
                 ):
                     result = None
-            except (KeyError, TypeError):
+            except (KeyError, TypeError, ValueError):
                 result = None
         if result is None:
             result = fingerprint(path)

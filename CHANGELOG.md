@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1 — 2026-10-20
+
+- Make missing inputs and unreadable directories actionable.
+- Stream page hashes and check source stability in cached, uncached and visual scans.
+- Validate cached fingerprint types/content identity and refuse linked/nonregular cache files.
+- Create reports exclusively and correct visual report typography.
+- Run promised typing/dependency checks and install the four authority documents.
+
 ## 1.2.0 - 2026-10-16
 
 - Added opt-in multiplicity-aware page overlap while preserving default set comparison and separate visual evidence.

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import lzma
+import math
+import os
+import stat
+import string
 import zipfile
+import zlib
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -38,20 +45,42 @@ class Fingerprint:
 
 def discover(paths: Iterable[Path]) -> list[Path]:
     found: set[Path] = set()
-    for candidate in paths:
-        resolved = candidate.resolve()
-        if resolved.is_dir():
-            found.update(
-                path for path in resolved.rglob("*") if path.suffix.lower() in {".cbz", ".zip"}
-            )
-        elif resolved.is_file() and resolved.suffix.lower() in {".cbz", ".zip"}:
-            found.add(resolved)
-    return sorted(found, key=lambda path: str(path).casefold())
+
+    def failed(error: OSError) -> None:
+        raise ScanError(f"Could not inspect directory: {error}") from error
+
+    try:
+        for candidate in paths:
+            resolved = candidate.resolve()
+            metadata = resolved.stat()
+            if stat.S_ISDIR(metadata.st_mode):
+                for directory, _directories, files in os.walk(resolved, onerror=failed):
+                    for name in files:
+                        path = Path(directory) / name
+                        if path.suffix.lower() in {".cbz", ".zip"}:
+                            metadata = path.stat()
+                            if stat.S_ISREG(metadata.st_mode):
+                                found.add(path.resolve(strict=True))
+            elif stat.S_ISREG(metadata.st_mode) and resolved.suffix.lower() in {".cbz", ".zip"}:
+                found.add(resolved)
+            else:
+                raise ScanError(f"Missing or unsupported input: {candidate}")
+    except FileNotFoundError as exc:
+        raise ScanError(f"Missing input: {exc.filename}") from exc
+    except (OSError, RuntimeError) as exc:
+        raise ScanError(f"Could not discover archives: {exc}") from exc
+    return sorted(found, key=lambda path: (str(path).casefold(), str(path)))
+
+
+def _identity(path: Path) -> tuple[int, int, int, int, int]:
+    info = path.stat()
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
 def fingerprint(path: Path) -> Fingerprint:
-    archive_hash = _hash_file(path)
     try:
+        before = _identity(path)
+        archive_hash = _hash_file(path)
         with zipfile.ZipFile(path) as archive:
             infos = archive.infolist()
             if len(infos) > MAX_ENTRIES:
@@ -66,10 +95,24 @@ def fingerprint(path: Path) -> Fingerprint:
                 if info.file_size > MAX_ENTRY_BYTES:
                     raise ScanError(f"Archive page exceeds the safety limit: {info.filename}")
                 with archive.open(info) as handle:
-                    pages.append(hashlib.sha256(handle.read()).hexdigest())
+                    page_digest = hashlib.sha256()
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        page_digest.update(chunk)
+                    pages.append(page_digest.hexdigest())
             if not pages:
                 warnings.append("No supported image pages found.")
-    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+        if _identity(path) != before:
+            raise ScanError("Archive changed during scan; retry with stable source files")
+    except (
+        OSError,
+        EOFError,
+        UnicodeError,
+        zipfile.BadZipFile,
+        RuntimeError,
+        NotImplementedError,
+        zlib.error,
+        lzma.LZMAError,
+    ) as exc:
         raise ScanError(f"Could not read archive {path}: {exc}") from exc
     ordered = tuple(sorted(pages))
     digest = hashlib.sha256("\n".join(ordered).encode("ascii")).hexdigest()
@@ -88,11 +131,19 @@ def scan(
     visual_distance: int = 6,
     multiplicity: bool = False,
 ) -> dict[str, Any]:
-    if not 0 < threshold <= 1:
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not 0 < threshold <= 1
+        or not math.isfinite(threshold)
+    ):
         raise ScanError("threshold must be greater than 0 and at most 1.")
     archives = discover(paths)
-    if not 0 <= visual_distance <= 64:
+    if not archives:
+        raise ScanError("No supported CBZ/ZIP archives found")
+    if type(visual_distance) is not int or not 0 <= visual_distance <= 64:
         raise ScanError("visual_distance must be between 0 and 64")
+    identities = {path: _identity(path) for path in archives}
     hits = 0
     if cache:
         from .cache import cached_fingerprints
@@ -133,7 +184,19 @@ def scan(
     if visual:
         from .visual import compare, page_evidence
 
-        pages = [page_evidence(path) for path in archives]
+        try:
+            pages = [page_evidence(path) for path in archives]
+        except (
+            OSError,
+            EOFError,
+            RuntimeError,
+            NotImplementedError,
+            UnicodeError,
+            zipfile.BadZipFile,
+            zlib.error,
+            lzma.LZMAError,
+        ) as exc:
+            raise ScanError(f"Could not read visual evidence: {exc}") from exc
         candidates = []
         for i, left_pages in enumerate(pages):
             for j in range(i + 1, len(pages)):
@@ -147,7 +210,16 @@ def scan(
             {"path": str(path), "skipped": evidence["skipped"], "truncated": evidence["truncated"]}
             for path, evidence in zip(archives, pages)
         ]
+    if any(_identity(path) != identities[path] for path in archives):
+        raise ScanError("Archive changed during scan; retry with stable source files")
     return report
+
+
+def _literal_path(path: str) -> str:
+    return "".join(
+        f"&#{ord(char)};" if char in string.punctuation else char
+        for char in json.dumps(path, ensure_ascii=False)
+    )
 
 
 def markdown(report: dict[str, Any]) -> str:
@@ -167,8 +239,8 @@ def markdown(report: dict[str, Any]) -> str:
             [
                 f"## {match['kind'].replace('_', ' ').title()}",
                 "",
-                f"- `{match['left']}`",
-                f"- `{match['right']}`",
+                f"- {_literal_path(match['left'])}",
+                f"- {_literal_path(match['right'])}",
                 f"- Page-hash similarity: {match['similarity']:.1%}",
                 "",
             ]
