@@ -13,6 +13,8 @@ from .core import IMAGE_SUFFIXES, MAX_ENTRY_BYTES, ScanError
 
 
 def page_evidence(path: Path, limit: int = 200) -> dict[str, Any]:
+    if type(limit) is not int or not 1 <= limit <= 200:
+        raise ScanError("Visual page limit must be an integer between 1 and 200")
     try:
         from PIL import Image
     except ImportError as exc:
@@ -34,7 +36,7 @@ def page_evidence(path: Path, limit: int = 200) -> dict[str, Any]:
                         skipped.append(info.filename)
                         continue
                     gray = original.convert("L").resize((9, 8))
-                    pixels = list(gray.getdata())
+                    pixels = list(gray.tobytes())
                     value = 0
                     for y in range(8):
                         for x in range(8):
@@ -87,13 +89,32 @@ def render_html(report: dict[str, Any]) -> str:
     body = [
         "<h1>Comic duplicate evidence</h1><p>Visual similarity is a review aid, not exact equality. Nothing is deleted.</p>"
     ]
+    if report.get("visual_review"):
+        body.append("<section><h2>Visual scan coverage</h2>")
+        for review in report["visual_review"]:
+            body.append(
+                "<p>"
+                + escape(review["path"])
+                + ": "
+                + str(len(review["skipped"]))
+                + " skipped pages; truncated: "
+                + str(review["truncated"])
+                + "</p>"
+            )
+            if review["skipped"]:
+                body.append(
+                    "<ul>"
+                    + "".join("<li>" + escape(name) + "</li>" for name in review["skipped"])
+                    + "</ul>"
+                )
+        body.append("</section>")
     for match in report["matches"]:
         body.append(
             f"<section><h2>{escape(match['kind'])}</h2><p>{escape(match['left'])}<br>{escape(match['right'])}</p></section>"
         )
     for match in report.get("visual_matches", []):
         body.append(
-            f"<section><h2>Visual candidate Â· {match['overlap']:.0%} page overlap</h2><p>{escape(match['left'])}<br>{escape(match['right'])}</p>"
+            f"<section><h2>Visual candidate · {match['overlap']:.0%} page overlap</h2><p>{escape(match['left'])}<br>{escape(match['right'])}</p>"
         )
         if match["partial"]:
             body.append(
