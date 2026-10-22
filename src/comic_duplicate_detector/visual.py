@@ -63,17 +63,40 @@ def page_evidence(path: Path, limit: int = 200) -> dict[str, Any]:
 
 
 def compare(left: dict[str, Any], right: dict[str, Any], distance: int) -> dict[str, Any]:
-    available = set(range(len(right["pages"])))
-    pairs = []
+    # Maximum-cardinality bipartite matching prevents a locally closest pair
+    # from hiding a second valid match. The existing 200-page admission limit
+    # bounds the graph and augmenting-path depth.
+    edges = []
     for page in left["pages"]:
         choices = sorted(
-            ((int(page["dhash"], 16) ^ int(right["pages"][j]["dhash"], 16)).bit_count(), j)
-            for j in available
+            ((int(page["dhash"], 16) ^ int(other["dhash"], 16)).bit_count(), j)
+            for j, other in enumerate(right["pages"])
         )
-        if choices and choices[0][0] <= distance:
-            difference, j = choices[0]
-            available.remove(j)
-            pairs.append({"left": page, "right": right["pages"][j], "distance": difference})
+        edges.append([(difference, j) for difference, j in choices if difference <= distance])
+    matched: dict[int, int] = {}
+
+    def augment(i: int, seen: set[int]) -> bool:
+        for _, j in edges[i]:
+            if j in seen:
+                continue
+            seen.add(j)
+            if j not in matched or augment(matched[j], seen):
+                matched[j] = i
+                return True
+        return False
+
+    for i in range(len(left["pages"])):
+        augment(i, set())
+    pairs = [
+        {
+            "left": left["pages"][i],
+            "right": right["pages"][j],
+            "distance": (
+                int(left["pages"][i]["dhash"], 16) ^ int(right["pages"][j]["dhash"], 16)
+            ).bit_count(),
+        }
+        for j, i in sorted(matched.items(), key=lambda item: item[1])
+    ]
     denominator = max(left["archive_page_count"], right["archive_page_count"])
     return {
         "kind": "visual_candidate",
