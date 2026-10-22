@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1 - 2026-10-22
+
+- Replace greedy visual page matching with bounded maximum-cardinality matching so local choices cannot hide valid overlap pairs.
+- Preserve exact-byte and multiplicity comparisons, partial-coverage warnings and the read-only archive boundary.
+- Add all-order counterexample and empty/disconnected regression cases.
+
 ## 2.0.0 — 2026-10-20
 
 - Require Python 3.11 or newer and Pillow 13.0.0 or newer (below 14); the fixed dependency no longer supports Python 3.10.

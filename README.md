@@ -115,3 +115,17 @@ The six full native CI cells use Ubuntu, Windows and macOS with Python 3.11 and
 3.14. All existing tests/assertions and the 90% coverage threshold remain, along
 with formatting, lint, strict typing, dependency audit, builds and CodeQL.
 No test skips, advisory waivers or repurposed Python 3.10 job names are introduced.
+
+## 2.0.1: Order-independent visual overlap
+
+Visual review now finds a maximum-cardinality one-to-one pairing within the
+configured dHash distance. Reordering already-scanned pages cannot reduce the
+pair count. Pair selection is deterministic for the same input order; multiple
+optimal pairings can exist, and distance is not globally minimized. The 200-page
+scan limit, full-archive denominator and partial-coverage warnings remain. Page
+selection beyond that limit can still depend on archive entry order. Exact-byte
+matches, multiplicity mode, caching and read-only source handling are unchanged.
+
+Regression tests cover the greedy counterexample in all page permutations,
+empty/disconnected graphs and one-to-one evidence. Keep full coverage, typing,
+native CI and exact installed-artifact acceptance before release.
